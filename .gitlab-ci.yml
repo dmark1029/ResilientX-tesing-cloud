@@ -1,0 +1,163 @@
+stages:
+  - development
+  - build_testing
+  - deploy_testing
+  - build_staging
+  - deploy_staging
+  - build_production
+  - deploy_production
+  - purge_cache
+
+variables:
+  DOCKER_TLS_CERTDIR: ""
+
+# token for cloudflare has only purge cache permission
+cloudflare_purge_cache:
+  stage: purge_cache
+  variables:
+    DEPLOY_CURL_COMMAND_BODY: "'{\"purge_everything\":true}'"
+    DEPLOY_CURL_COMMAND: 'curl -X POST "https://api.cloudflare.com/client/v4/zones/e3f66ab9aeabfab606490823f6feef23/purge_cache" -H "Content-Type: application/json" -H "Authorization: Bearer _FsFVRtP0hQn9Ud9PqwsUtyosqJywKjmvk_KrgKz" --data $DEPLOY_CURL_COMMAND_BODY'
+  script:
+    - apk add curl
+    - eval "$DEPLOY_CURL_COMMAND"
+  only:
+    - testing
+    - staging
+    - main
+
+development:
+  image: node:lts-alpine
+  stage: development
+  script:
+    - npm install
+    - npm run lint
+    - npm run test
+  only:
+    - development
+
+build_testing:
+  image: docker:stable
+  stage: build_testing
+  tags:
+    - deployment
+  services:
+    - name: docker:dind
+      alias: docker
+  script:
+    - apk add aws-cli
+    - apk add git
+    - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+    - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
+    - aws configure set default.region $AWS_REGION
+    - echo $(git rev-parse --short HEAD) > version
+    - cp $ENV_TESTING .env
+    - docker build -t rx-dashboard-testing:latest .
+    - docker tag rx-dashboard-testing:latest ${AWS_ECR_REPOSITORY_TESTING}/rx-dashboard-testing:latest
+    - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin ${AWS_ECR_REPOSITORY_TESTING}
+    - docker push ${AWS_ECR_REPOSITORY_TESTING}/rx-dashboard-testing:latest
+  environment:
+    name: testing
+    url: https://testing.resilientx.cloud
+  only:
+    - testing
+
+deploy_testing:
+  image: alpine:latest
+  stage: deploy_testing
+  tags:
+    - deployment
+  script:
+    - echo $SERVER_IP_TESTING
+    - echo $ID_RSA
+    - chmod 600 $ID_RSA
+    - apk update && apk add openssh-client
+    - ssh -i $ID_RSA -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP_TESTING "cd /home/ubuntu/deploy && ./prod-start-dashboard.sh"
+  environment:
+    name: testing
+    url: https://testing.resilientx.cloud
+  only:
+    - testing
+
+build_staging:
+  image: docker:stable
+  stage: build_staging
+  tags:
+    - deployment
+  services:
+    - name: docker:dind
+      alias: docker
+  script:
+    - apk add aws-cli
+    - apk add git
+    - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+    - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
+    - aws configure set default.region $AWS_REGION
+    - echo $(git rev-parse --short HEAD) > version
+    - cp $ENV_STAGING .env
+    - docker build -t rx-dashboard-staging:latest .
+    - docker tag rx-dashboard-staging:latest ${AWS_ECR_REPOSITORY_STAGING}/rx-dashboard-staging:latest
+    - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin ${AWS_ECR_REPOSITORY_STAGING}
+    - docker push ${AWS_ECR_REPOSITORY_STAGING}/rx-dashboard-staging:latest
+  environment:
+    name: staging
+    url: https://staging.resilientx.cloud
+  only:
+    - staging
+
+deploy_staging:
+  image: alpine:latest
+  stage: deploy_staging
+  tags:
+    - deployment
+  script:
+    - echo $SERVER_IP_STAGING
+    - echo $ID_RSA
+    - chmod 600 $ID_RSA
+    - apk update && apk add openssh-client
+    - ssh -i $ID_RSA -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP_STAGING "cd /home/ubuntu/deploy && ./prod-start-dashboard.sh"
+  environment:
+    name: staging
+    url: https://staging.resilientx.cloud
+  only:
+    - staging
+
+build_production:
+  image: docker:stable
+  stage: build_production
+  tags:
+    - deployment
+  services:
+    - name: docker:dind
+      alias: docker
+  script:
+    - apk add aws-cli
+    - apk add git
+    - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+    - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
+    - aws configure set default.region $AWS_REGION
+    - echo $(git rev-parse --short HEAD) > version
+    - cp $ENV_PRODUCTION .env
+    - docker build -t rx-dashboard-production:latest .
+    - docker tag rx-dashboard-production:latest ${AWS_ECR_REPOSITORY_PRODUCTION}/rx-dashboard-production:latest
+    - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin ${AWS_ECR_REPOSITORY_PRODUCTION}
+    - docker push ${AWS_ECR_REPOSITORY_PRODUCTION}/rx-dashboard-production:latest
+  environment:
+    name: production
+    url: https://resilientx.cloud
+  only:
+    - main
+
+deploy_production:
+  image: alpine:latest
+  stage: deploy_production
+  tags:
+    - deployment
+  script:
+    - chmod 600 $ID_RSA
+    - apk update && apk add openssh-client
+    - ssh -i $ID_RSA -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP_PRODUCTION "cd /home/ubuntu/deploy && ./prod-start-dashboard.sh"
+  environment:
+    name: production
+    url: https://resilientx.cloud
+  only:
+    - main

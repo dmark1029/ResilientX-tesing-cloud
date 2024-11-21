@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex">
+    <title></title>
+    <link rel="manifest" href="/manifest.json" />
+    <link
+            rel="preload"
+            as="style"
+            onload="this.rel='stylesheet'"
+            href="/vendors/font-awesome-v5.css"
+    />
+    <script>
+        ;(function () {
+            document.documentElement.classList.toggle('is-dark', true)
+        })()
+    </script>
+</head>
+<body>
+    <div data-teleport-bg></div>
+    <div id="app" class="app-wrapper"></div>
+    <script type="module" src="/src/main.js"></script>
+</body>
+</html>
